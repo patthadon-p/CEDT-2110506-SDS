@@ -26,3 +26,6 @@
 # latexindent backup files (see `make fmt`), redirected into .build/
 **/.build/*.bak
 **/*.bak
+
+# Ignore all source directories
+**/src
