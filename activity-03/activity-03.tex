@@ -1,0 +1,182 @@
+\documentclass[a4paper, 10pt]{article}
+\usepackage{scrextend}
+\changefontsizes{9pt}
+\input{../course-config}
+\usepackage{../vendor/template/CEDT-Assignment-style}
+
+\begin{document}
+\subject
+\asgntitle{3}{}{Week 4}{\StudentID\ \StudentName}{\DefaultCollaborators}
+
+% ================================================================================ %
+\section*{Activity: Orchestrating Microservices Containers}
+% ================================================================================ %
+
+\textbf{Instructions}
+\begin{enumerate}
+	\item Work individually.
+	      This assignment is due Monday September 7th, 2026 no later than 11:00 pm (23:00) on mycourseville (pdf only)
+	\item \textit{NOTE:} you must run grader as I will mainly use the results from grader.
+	\item You will create docker-compose file to orchestrate the following components:
+	      \begin{subproblems_alpha}
+		      \item \texttt{todo-webapp} (src=release-3.1) - map port: container 3000 to host 3000
+		      \item \texttt{todo} (src=release-3) - set name to \texttt{todo-service}
+		      \item \texttt{todo-notification} (src=release-1.1) - set name to \texttt{notification-service}
+		      \item API Gateway (using NGINX) - map port: container 8000 to host 8000 - set name to \texttt{api-gateway}
+		      \item Network name: \texttt{todo-net}
+	      \end{subproblems_alpha}
+	\item \texttt{todo}, \texttt{todo-notification}, API Gateway must be all connected to the same internal network.
+	\item You must modify nginx configuration file as followed:
+	      \begin{subproblems_alpha}
+		      \item Listen to port 8000.
+		      \item Point proxy from \texttt{/todo/} to \href{http://todo-service:8000/}{http://todo-service:8000/}
+		      \item Point proxy from \texttt{/notification/} to \href{http://notification-service:9000/}{http://notification-service:9000/}
+	      \end{subproblems_alpha}
+	\item Prepare a set of slides in PDF containing the following information.
+	      \begin{subproblems_alpha}
+		      \item Your \texttt{docker-compose.yml}.
+		      \item Screenshot when you run \texttt{docker-compose up}.
+		      \item Screenshot after all containers are running and you use command: \texttt{docker ps -a}.
+		      \item Screenshot of browser connecting to \texttt{todo-webapp} with some todo items.
+	      \end{subproblems_alpha}
+\end{enumerate}
+
+\begin{center}
+	\par\noindent\textbf{\color{red} YOU MUST ALSO USING GRADER (URL is in MCV's assignment)}
+\end{center}
+
+\begin{flushright}
+	The answers and solutions are provided in the next page\dots
+\end{flushright}
+
+\newpage
+
+% ================================================================================ %
+%                                    Problem 01                                    %
+% ================================================================================ %
+\begin{problem}
+Your \texttt{docker-compose.yml}.
+\end{problem}
+
+\begin{solution}
+	Here's the \texttt{docker-compose.yml} file:
+	\begin{codingbox*}[language=YAML]
+name: activity-03
+
+services:
+  todo-webapp:
+    build:
+      context: ./src/todo-webapp
+    container_name: webapp
+    ports:
+      - "3000:3000"
+    stdin_open: true
+    tty: true
+    networks:
+      - todo-net
+    depends_on:
+      - api-gateway
+
+  todo:
+    build:
+      context: ./src/todo
+    container_name: todo-service
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      NOTIFICATION_HOST: notification-service
+      NOTIFICATION_PORT: "9000"
+    networks:
+      - todo-net
+    depends_on:
+      - redis
+      - todo-notification
+
+  todo-notification:
+    build:
+      context: ./src/todo-notification
+    container_name: notification-service
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    networks:
+      - todo-net
+    depends_on:
+      - redis
+
+  api-gateway:
+    image: nginx:alpine
+    container_name: api-gateway
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - todo-net
+    depends_on:
+      - todo
+      - todo-notification
+
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    networks:
+      - todo-net
+
+networks:
+  todo-net:
+    name: todo-net
+    driver: bridge
+\end{codingbox*}
+\end{solution}
+% ================================================================================ %
+
+% ================================================================================ %
+%                                    Problem 02                                    %
+% ================================================================================ %
+\begin{problem}
+Screenshot when you run \texttt{docker-compose up}.
+\end{problem}
+
+\begin{solution}
+	\fig[0.8\linewidth]{images/activity-03-problem-02.png}{Output of \texttt{docker compose up}.}{compose-up}
+\end{solution}
+% ================================================================================ %
+
+% ================================================================================ %
+%                                    Problem 03                                    %
+% ================================================================================ %
+\begin{problem}
+Screenshot after all containers are running and you use command: \texttt{docker ps -a}.
+\end{problem}
+
+\begin{solution}
+	\fig[\linewidth]{images/activity-03-problem-03.png}{Output of \texttt{docker ps -a}.}{docker-ps}
+\end{solution}
+% ================================================================================ %
+
+% ================================================================================ %
+%                                    Problem 04                                    %
+% ================================================================================ %
+\begin{problem}
+Screenshot of browser connecting to \texttt{todo-webapp} with some todo items.
+\end{problem}
+
+\begin{solution}
+	\fig[0.8\linewidth]{images/activity-03-problem-04.png}{Screenshot of browser connecting to \texttt{todo-webapp} with some todo items.}{todo-webapp}
+\end{solution}
+% ================================================================================ %
+
+% ================================================================================ %
+%                                    Problem 05                                    %
+% ================================================================================ %
+\begin{problem}
+Screenshot of the results after running the \texttt{GRADER}.
+\end{problem}
+
+\begin{solution}
+	\fig[\linewidth]{images/activity-03-problem-05.png}{Screenshot of the results after running the \texttt{GRADER}.}{grader}
+\end{solution}
+% ================================================================================ %
+
+\end{document}
