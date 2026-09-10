@@ -14,17 +14,17 @@ It is structured for clarity, reproducibility, and ease of compilation.
 │   ├── activity-01.pdf         # Compiled/exported assignment
 │   ├── code/
 │   │   └── activity-01.ipynb   # Jupyter notebook (circuits, code)
-│   └── images/                   # Diagrams / figures (if any)
+│   └── images/                 # Diagrams / figures (if any)
 ├── activity-02/ ...            # Later activities, same layout (notebook and/or LaTeX)
-├── vendor/template/              # Git submodule: shared style + scaffolding (see below)
-├── course-config.tex             # This subject's values (course code/name, student info)
-├── Makefile                      # Thin wrapper that includes vendor/template/Makefile.include
+├── vendor/template/            # Git submodule: shared style + scaffolding (see below)
+├── course-config.tex           # This subject's values (course code/name, student info)
+├── Makefile                    # Thin wrapper that includes vendor/template/Makefile.include
 ├── .gitmodules
 ├── .gitignore
 └── README.md
 ```
 
--- **`activity-xx/`** → Each activity, as a Jupyter notebook and/or LaTeX source, with its compiled PDF and (for LaTeX ones) a per-folder `.latexmkrc`.
+- **`activity-xx/`** → Each activity, as a Jupyter notebook and/or LaTeX source, with its compiled PDF and (for LaTeX ones) a per-folder `.latexmkrc`.
 - **`images/`** → Supporting figures, TikZ diagrams, plots, or circuit screenshots.
 
 ### Shared template (`vendor/template/`)
