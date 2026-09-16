@@ -1,0 +1,416 @@
+\documentclass[a4paper, 10pt]{article}
+\usepackage{scrextend}
+\changefontsizes{9pt}
+\input{../course-config}
+\usepackage{../vendor/template/CEDT-Assignment-style}
+
+% listings ships no HCL/Terraform dialect and the shared style only predefines
+% YAML, so declare a minimal one here to colour main.tf the same way the YAML in
+% the earlier activities is coloured.
+\lstdefinelanguage{HCL}{
+	morekeywords={terraform, provider, resource, variable, output, module, data,
+		locals, required_providers, required_version, depends_on, true, false, null},
+	sensitive=true,
+	morecomment=[l]{\#},
+	morecomment=[l]{//},
+	morecomment=[s]{/*}{*/},
+	morestring=[b]",
+}
+
+\begin{document}
+\subject
+\asgntitle{5}{}{Week 6}{\StudentID\ \StudentName}{\DefaultCollaborators}
+
+% ================================================================================ %
+\section*{Activity: DevOps and Infrastructure as Code}
+% ================================================================================ %
+
+\textbf{Instructions}
+\begin{enumerate}
+	\item This assignment is due Wednesday September 16, 2026 no later than 11:00 pm on mycourseville (pdf only).
+	\item Use {terraform} to run \texttt{todo} container version 3.0 and \texttt{redis} container.
+	\item Prepare a PDF report containing the following information:
+	      \begin{enumerate}
+		      \item Content of your \texttt{terraform} file.
+		      \item Screenshot of running \texttt{terraform} in each step.
+	      \end{enumerate}
+\end{enumerate}
+
+\begin{center}
+	\par\noindent\textbf{\color{red} YOU MUST ALSO USING GRADER (URL is in MCV's assignment)}
+\end{center}
+
+\newpage
+
+\noindent\textbf{Environment.}
+Everything runs on a local Docker Engine 29.7.2 (Ubuntu on WSL2), driven by
+\textbf{Terraform v1.13.3} through the \textbf{\texttt{kreuzwerker/\allowbreak docker}}
+provider v3.9.0 --- the community provider that talks to the Docker Engine API
+directly, so no \texttt{docker run} or \texttt{docker compose} is involved: the
+containers are created, tracked in \texttt{terraform.tfstate}, and torn down
+entirely as Terraform-managed resources.
+
+\medskip
+
+\noindent\textbf{A note on the third container.}
+Version~3.0 of \texttt{todo} (\texttt{natawut/todo-service:release-3}) is the
+release that gained notifications: every \texttt{POST /} calls
+\texttt{set\_notification()}, which fires a request at
+\texttt{NOTIFICATION\_HOST:\allowbreak NOTIFICATION\_PORT} (default \texttt{localhost:9000})
+and never looks at the reply. The reply is ignored, but a \emph{refused}
+connection is not: \texttt{requests} raises \texttt{ConnectionError} out of the
+request handler, so with \texttt{todo} and \texttt{redis} alone every create
+answers \texttt{500 Internal Server Error}, and the grader's POST check fails.
+This activity has no notification service to point it at, so a plain
+\texttt{nginx} stands in as that endpoint: it answers \texttt{405} to the
+notification POST, \texttt{todo} discards the reply, and the create succeeds.
+It is one \texttt{docker\_container} resource and one variable
+(\texttt{var.notification\_image}); pointing that variable at the real
+notification service is the only change needed to make it real.
+
+\bigskip
+
+% ================================================================================ %
+%                                    Problem 01                                    %
+% ================================================================================ %
+\begin{problem}
+Content of \texttt{terraform} file.
+\end{problem}
+
+\begin{solution}
+	The whole configuration lives in one file, \texttt{main.tf}, and declares seven
+	resources: the \texttt{todo-net} bridge network, three images, and three
+	containers. Only \texttt{todo} is published to the host
+	(\texttt{8000:8000}); \texttt{redis} and the notification stub stay inside
+	\texttt{todo-net}, where Docker's embedded DNS resolves them by container name ---
+	which is what \texttt{REDIS\_HOST=redis} relies on. The container is named
+	\texttt{todo-service}, the name the rest of the course's stack (and the grader)
+	expects. Declaring the images as \texttt{docker\_image} resources makes the pull
+	part of the plan instead of a side effect of the run, and
+	\texttt{keep\_locally~=~true} leaves the pulled images in the local cache when the
+	rest is destroyed.
+	\begin{codingbox*}[language=HCL]
+# Activity 5 - Infrastructure as Code
+# Run the todo service (version 3.0) and its redis database with Terraform.
+
+terraform {
+  required_version = ">= 1.5"
+
+  required_providers {
+    docker = {
+      source  = "kreuzwerker/docker"
+      version = "~> 3.0"
+    }
+  }
+}
+
+# Talks to the local Docker daemon. The host is left at the provider default so
+# it follows DOCKER_HOST / unix:///var/run/docker.sock, which keeps the file
+# portable between Docker Desktop and a plain dockerd.
+provider "docker" {}
+
+variable "todo_image" {
+  description = "Docker image of the todo service (version 3.0)."
+  type        = string
+  default     = "natawut/todo-service:release-3"
+}
+
+variable "redis_image" {
+  description = "Docker image of the redis database."
+  type        = string
+  default     = "redis:7-alpine"
+}
+
+# todo 3.0 POSTs a notification to NOTIFICATION_HOST:NOTIFICATION_PORT on every
+# created todo and never checks the response, but a refused connection raises
+# out of the request handler and turns POST / into a 500. This activity has no
+# notification service to point it at, so a plain nginx stands in as the
+# endpoint: it answers 405 to the notification POST, todo discards the response,
+# and creating a todo succeeds. Swap this for the real notification service and
+# nothing else in this file has to change.
+variable "notification_image" {
+  description = "Docker image standing in for the notification endpoint."
+  type        = string
+  default     = "nginx:alpine"
+}
+
+variable "todo_port" {
+  description = "Host port the todo service is published on."
+  type        = number
+  default     = 8000
+}
+
+# ---------------------------------------------------------------------------
+# Network
+# ---------------------------------------------------------------------------
+
+# A user-defined bridge network gives both containers Docker's embedded DNS, so
+# todo can reach redis by container name (REDIS_HOST=redis below).
+resource "docker_network" "todo_net" {
+  name   = "todo-net"
+  driver = "bridge"
+}
+
+# ---------------------------------------------------------------------------
+# Images
+# ---------------------------------------------------------------------------
+
+resource "docker_image" "redis" {
+  name         = var.redis_image
+  keep_locally = true
+}
+
+resource "docker_image" "todo" {
+  name         = var.todo_image
+  keep_locally = true
+}
+
+resource "docker_image" "notification" {
+  name         = var.notification_image
+  keep_locally = true
+}
+
+# ---------------------------------------------------------------------------
+# Containers
+# ---------------------------------------------------------------------------
+
+# Not published to the host: only the todo service needs to reach it, and it
+# does so over todo-net.
+resource "docker_container" "redis" {
+  name    = "redis"
+  image   = docker_image.redis.image_id
+  restart = "unless-stopped"
+
+  networks_advanced {
+    name = docker_network.todo_net.name
+  }
+}
+
+# Answers the notification POST described by var.notification_image. Like redis,
+# it is internal to todo-net only.
+resource "docker_container" "notification" {
+  name    = "notification-service"
+  image   = docker_image.notification.image_id
+  restart = "unless-stopped"
+
+  networks_advanced {
+    name = docker_network.todo_net.name
+  }
+}
+
+resource "docker_container" "todo" {
+  name    = "todo-service"
+  image   = docker_image.todo.image_id
+  restart = "unless-stopped"
+
+  env = [
+    "REDIS_HOST=${docker_container.redis.name}",
+    "REDIS_PORT=6379",
+    "NOTIFICATION_HOST=${docker_container.notification.name}",
+    "NOTIFICATION_PORT=80",
+  ]
+
+  ports {
+    internal = 8000
+    external = var.todo_port
+  }
+
+  networks_advanced {
+    name = docker_network.todo_net.name
+  }
+
+  # Terraform already infers these from the REDIS_HOST / NOTIFICATION_HOST
+  # references above; stated explicitly so the ordering survives any edit to
+  # those lines.
+  depends_on = [
+    docker_container.redis,
+    docker_container.notification,
+  ]
+}
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+
+output "todo_url" {
+  description = "Where the todo service is reachable from the host."
+  value       = "http://localhost:${var.todo_port}"
+}
+
+output "container_names" {
+  description = "Containers created by this configuration."
+  value = [
+    docker_container.todo.name,
+    docker_container.redis.name,
+    docker_container.notification.name,
+  ]
+}
+	\end{codingbox*}
+\end{solution}
+% ================================================================================ %
+
+% ================================================================================ %
+%                                    Problem 02                                    %
+% ================================================================================ %
+\begin{problem}
+Screenshot of running \texttt{terraform} in each step.
+\end{problem}
+
+\begin{solution}
+	\textbf{Step 1 --- \texttt{terraform init}.}
+	Downloads the \texttt{kreuzwerker/docker} plugin into \texttt{.terraform/} and
+	records the exact version in \texttt{.terraform.lock.hcl}.
+	\begin{codingbox*}[language=bash]
+$ terraform init
+
+Initializing the backend...
+Initializing provider plugins...
+- Finding kreuzwerker/docker versions matching "~> 3.0"...
+- Installing kreuzwerker/docker v3.9.0...
+- Installed kreuzwerker/docker v3.9.0 (self-signed, key ID 0DCE698927DAF8EC)
+Partner and community providers are signed by their developers.
+[...]
+Terraform has created a lock file .terraform.lock.hcl to record the provider
+selections it made above. Include this file in your version control repository
+so that Terraform can guarantee to make the same selections by default when
+you run "terraform init" in the future.
+
+Terraform has been successfully initialized!
+	\end{codingbox*}
+
+	\textbf{Step 2 --- \texttt{terraform plan}.}
+	Seven resources to add, nothing to change or destroy. Only the
+	\texttt{docker\_container.todo} block is reproduced here --- it is the one
+	carrying the environment and the published port; the other six blocks and the
+	attributes that are only known after apply are elided.
+	\begin{codingbox*}[language=bash]
+$ terraform plan
+
+Terraform used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  + create
+
+Terraform will perform the following actions:
+
+  # docker_container.todo will be created
+  + resource "docker_container" "todo" {
+      + env                                         = [
+          + "NOTIFICATION_HOST=notification-service",
+          + "NOTIFICATION_PORT=80",
+          + "REDIS_HOST=redis",
+          + "REDIS_PORT=6379",
+        ]
+      + name                                        = "todo-service"
+      + network_mode                                = "bridge"
+      + restart                                     = "unless-stopped"
+      [... remaining attributes known after apply ...]
+
+      + networks_advanced {
+          + aliases      = []
+          + name         = "todo-net"
+        }
+
+      + ports {
+          + external = 8000
+          + internal = 8000
+          + ip       = "0.0.0.0"
+          + protocol = "tcp"
+        }
+    }
+
+  [... docker_container.redis, docker_container.notification, docker_image.todo,
+       docker_image.redis, docker_image.notification, docker_network.todo_net ...]
+
+Plan: 7 to add, 0 to change, 0 to destroy.
+
+Changes to Outputs:
+  + container_names = [
+      + "todo-service",
+      + "redis",
+      + "notification-service",
+    ]
+  + todo_url        = "http://localhost:8000"
+	\end{codingbox*}
+
+	\textbf{Step 3 --- \texttt{terraform apply}.}
+	Terraform reprints the plan and then creates the resources, respecting the
+	dependency order it worked out: the images and the network first, then
+	\texttt{redis} and the notification stub, then \texttt{todo-service}, which
+	depends on both. The pulls finish in a second because the images were already in
+	the local cache from an earlier run --- \texttt{keep\_locally~=~true} is what
+	keeps them there across a \texttt{destroy}.
+	\begin{codingbox*}[language=bash]
+$ terraform apply -auto-approve
+
+[... same plan as above ...]
+
+docker_image.notification: Creating...
+docker_network.todo_net: Creating...
+docker_image.redis: Creating...
+docker_image.todo: Creating...
+docker_image.todo: Creation complete after 1s [id=sha256:8564bc13a323...natawut/todo-service:release-3]
+docker_image.redis: Creation complete after 1s [id=sha256:ff02b58f971e...redis:7-alpine]
+docker_image.notification: Creation complete after 1s [id=sha256:72ba65eb42c1...nginx:alpine]
+docker_network.todo_net: Creation complete after 2s [id=450a852a4874...]
+docker_container.redis: Creating...
+docker_container.notification: Creating...
+docker_container.notification: Creation complete after 0s [id=fb81a2187631...]
+docker_container.redis: Creation complete after 0s [id=3b64528cd7d9...]
+docker_container.todo: Creating...
+docker_container.todo: Creation complete after 1s [id=1e914733dee6...]
+
+Apply complete! Resources: 7 added, 0 changed, 0 destroyed.
+
+Outputs:
+
+container_names = [
+  "todo-service",
+  "redis",
+  "notification-service",
+]
+todo_url = "http://localhost:8000"
+	\end{codingbox*}
+
+	\textbf{Step 4 --- verifying what Terraform built.}
+	All three containers are up, with port \texttt{8000} the only one published to
+	the host, and the service does a full round trip: the \texttt{POST} returns the
+	id of the new todo and the following \texttt{GET} reads it back out of redis.
+	\begin{codingbox*}[language=bash]
+$ docker ps --filter name=todo-service --filter name=redis --filter name=notification-service \
+      --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
+NAMES                  IMAGE          STATUS         PORTS
+todo-service           8564bc13a323   Up 8 seconds   0.0.0.0:8000->8000/tcp
+notification-service   72ba65eb42c1   Up 9 seconds   80/tcp
+redis                  ff02b58f971e   Up 9 seconds   6379/tcp
+
+$ curl -X POST -d '{"title":"todo-1","detail":"the first todo","duedate":"2022-10-24 11:00:00","tags":[],"completed":false}' http://localhost:8000
+{"id":0}
+
+$ curl http://localhost:8000
+[{"id":0,"title":"todo-1","detail":"the first todo","completed":false,"duedate":"2022-10-24T11:00:00","tags":[]}]
+	\end{codingbox*}
+\end{solution}
+% ================================================================================ %
+
+% ================================================================================ %
+%                                    Problem 03                                    %
+% ================================================================================ %
+\begin{problem}
+Screenshot of the results after running the \texttt{GRADER}.
+\end{problem}
+
+\begin{solution}
+	The grader is pointed at \texttt{main.tf} (its default), checks the Terraform
+	side --- file present, CLI installed, working directory initialized, plan
+	generated --- and then the running stack: both named containers, the service
+	answering on \texttt{http://localhost:8000}, and a \texttt{POST} whose result
+	comes back on the following \texttt{GET}. Every check passes ---
+	\texttt{Result: true} --- after which it prompts for the Student ID and full name
+	to submit the result. (In the transcript below the per-line timestamps are
+	trimmed and the status glyphs the grader prints are written as \texttt{OK}.)
+	
+	\fig[\linewidth]{images/grader.png}{\texttt{activity5-CEDT} grader --- all checks pass, \texttt{Result: true}.}{grader}
+\end{solution}
+% ================================================================================ %
+
+\end{document}
