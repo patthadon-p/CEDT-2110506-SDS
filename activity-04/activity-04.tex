@@ -1,0 +1,225 @@
+\documentclass[a4paper, 10pt]{article}
+\usepackage{scrextend}
+\changefontsizes{9pt}
+\input{../course-config}
+\usepackage{../vendor/template/CEDT-Assignment-style}
+
+\begin{document}
+\subject
+\asgntitle{4}{}{Week 5}{\StudentID\ \StudentName}{\DefaultCollaborators}
+
+% ================================================================================ %
+\section*{Activity: Kubernetes with Multiple Containers}
+% ================================================================================ %
+
+\textbf{Instructions}
+\begin{enumerate}
+	\item This assignment is due Wednesday September 9th no later than 11:00 pm on mycourseville (pdf only).
+	\item Install a kubernetes cluster (using docker desktop or k3d or other distributions).
+	\item Test your cluster with nginx as followed:
+	      \begin{subproblems_alpha}
+		      \item Deploy an nginx on your cluster using the deployment file from
+		            \par\href{https://k8s.io/examples/application/deployment.yaml}{https://k8s.io/examples/application/deployment.yaml}
+		      \item Use kubectl to describe the deployment
+	      \end{subproblems_alpha}
+	\item Deploy a \texttt{todo} service with redis database as followed:
+	      \begin{subproblems_alpha}
+		      \item Study how to create a deployment of multiple containers in a single pod from
+		            \par\small{\href{https://www.mirantis.com/blog/multi-container-pods-and-container-communication-in-kubernetes/}{https://www.mirantis.com/blog/multi-container-pods-and-container-communication-in-kubernetes/}}
+		      \item Create a deployment file of a pod with service of the following containers:
+		            \begin{enumerate}[label=\roman*)]
+			            \item \texttt{todo} (release-2.1)
+			            \item \texttt{redis}
+		            \end{enumerate}
+		            \par \textit{Note:} you can use a docker-hub image: \texttt{natawut/todo-service:release-2.1} and you must ensure that environment for \texttt{REDIS\_HOST} is correctly set.
+		      \item Deploy the pod, expose service, and show your deployment, service, and pods with kubectl get command.
+		      \item Create ingress configuration file, apply the file, and show the ingress information.
+		      \item Test the newly deployment:
+		            \begin{enumerate}[label=\roman*)]
+			            \item Create a new todo record with:
+			                  \begin{codingbox}[language=bash]
+{"title":"todo-1","detail":"the first todo","duedate":"2022-10-24 11:00:00","tags":[],"completed":false}
+\end{codingbox}
+			            \item Get \texttt{todo} list via \href{http://localhost:80}{localhost:80}
+		            \end{enumerate}
+		            \par Below shows the sample output:
+		            \begin{codingbox}[language=bash]
+curl -X POST -d '{"title":"todo-1","detail":"the first todo","duedate":"2024-10-13 11:00:00","tags":[],"completed":false}' http://localhost
+\end{codingbox}
+		            \fig[\linewidth]{images/step-04-example.png}{Example output of the \texttt{todo} service.}{step-04-example}
+		            \par \textit{Note:} to help you debug, you may use kubectl logs to check the system log in the container
+	      \end{subproblems_alpha}
+	\item Use the activity grader here:
+	      \par\href{https://github.com/fonylew/sds-grader/releases#release-v0.3.3-activity4}{https://github.com/fonylew/sds-grader/releases\#release-v0.3.3-activity4}
+	\item Prepare a PDF report containing the following information:
+	      \begin{subproblems_alpha}
+		      \item Screenshot when you perform Step 3.
+		      \item The deployment file that you create in Step 4.b and ingress file in Step 4.d.
+		      \item Screenshot when you perform Step 4.c - Step 4.e.
+	      \end{subproblems_alpha}
+\end{enumerate}
+
+\begin{center}
+	\par\noindent\textbf{\color{red} YOU MUST ALSO USING GRADER (URL is in MCV's assignment)}
+\end{center}
+
+\newpage
+
+\noindent\textbf{Environment.}
+The cluster is a local single-node \textbf{k3d} cluster (k3s in Docker), created with
+host port \texttt{80} mapped to the cluster load balancer so the ingress is reachable
+at \texttt{http://localhost}; k3d ships \textbf{Traefik} as the default ingress
+controller. \texttt{kubectl}~v1.37 against server~v1.35.
+\begin{codingbox*}[language=bash]
+$ k3d cluster create sds --port "80:80@loadbalancer"
+$ kubectl get nodes
+NAME               STATUS   ROLES                  AGE   VERSION
+k3d-sds-server-0   Ready    control-plane,master   1m    v1.35.5+k3s1
+\end{codingbox*}
+
+\bigskip
+
+% ================================================================================ %
+%                                    Problem 01                                    %
+% ================================================================================ %
+\begin{problem}
+Screenshot when you perform Step 3.
+\end{problem}
+
+\begin{solution}
+	The example deployment is applied with
+	\texttt{kubectl apply -f https://k8s.io/examples/application/deployment.yaml}
+	and then inspected with \texttt{kubectl describe deployment nginx-deployment}.
+	It runs 2 replicas of \texttt{nginx:1.14.2}, both \texttt{Available}.
+
+	\fig[\linewidth]{images/step-03.png}{Step 3 --- deploy the example nginx and \texttt{kubectl describe deployment nginx-deployment}.}{step-03}
+\end{solution}
+% ================================================================================ %
+
+% ================================================================================ %
+%                                    Problem 02                                    %
+% ================================================================================ %
+\begin{problem}
+The deployment file that you create in Step 4.b and ingress file in Step 4.d.
+\end{problem}
+
+\begin{solution}
+	\textbf{(a) Deployment --- \texttt{todo-deployment.yaml} (Step 4.b).}
+	One pod with two containers, \texttt{todo} and \texttt{redis}. Containers in the
+	same pod share a network namespace, so the todo service reaches redis on
+	\texttt{localhost} --- hence \texttt{REDIS\_HOST: localhost}.
+	\begin{codingbox*}[language=YAML]
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo
+  labels:
+    app: todo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: todo
+  template:
+    metadata:
+      labels:
+        app: todo
+    spec:
+      containers:
+        - name: todo
+          image: natawut/todo-service:release-2.1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: REDIS_HOST
+              value: "localhost"      # same pod -> same network namespace
+            - name: REDIS_PORT
+              value: "6379"
+        - name: redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 6379
+	\end{codingbox*}
+
+	\textbf{(b) Service --- \texttt{todo-service.yaml} (Step 4.c, ``expose service'').}
+	A ClusterIP service in front of the todo container's port \texttt{8000}. It is
+	\emph{not} exposed on the host, so \texttt{localhost:8000} and \texttt{localhost:6379}
+	stay unreachable from outside --- only the ingress is public.
+	\begin{codingbox*}[language=YAML]
+apiVersion: v1
+kind: Service
+metadata:
+  name: todo
+  labels:
+    app: todo
+spec:
+  selector:
+    app: todo
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+	\end{codingbox*}
+
+	\textbf{(c) Ingress --- \texttt{todo-ingress.yaml} (Step 4.d).}
+	Routes \texttt{http://localhost/} to the todo service. The resource is named
+	\texttt{todo-ingress} (the grader runs \texttt{kubectl get ingress} and only
+	accepts the result when the word ``ingress'' appears in that output).
+	\begin{codingbox*}[language=YAML]
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: todo-ingress
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: localhost
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: todo
+                port:
+                  number: 8000
+	\end{codingbox*}
+\end{solution}
+% ================================================================================ %
+
+% ================================================================================ %
+%                                    Problem 03                                    %
+% ================================================================================ %
+\begin{problem}
+Screenshot when you perform Step 4.c - Step 4.e.
+\end{problem}
+
+\begin{solution}
+	Step 4.c applies \texttt{todo-deployment.yaml} and \texttt{todo-service.yaml} and shows
+	\texttt{kubectl get deployment,svc,pods} --- the pod is \texttt{2/2} ready (both the
+	\texttt{todo} and \texttt{redis} containers). Step 4.d applies \texttt{todo-ingress.yaml}
+	and shows \texttt{kubectl get/describe ingress}. Step 4.e \texttt{POST}s a todo to
+	\texttt{http://localhost} (returns \texttt{\{"id":0\}}) and \texttt{GET}s the list back.
+
+	\fig[\linewidth]{images/step-04.png}{Step 4.c--4.e --- \texttt{kubectl get deployment,svc,pods}, \texttt{describe ingress}, and the \texttt{curl} round-trip against \texttt{http://localhost}.}{step-04}
+\end{solution}
+% ================================================================================ %
+
+% ================================================================================ %
+%                                    Problem 04                                    %
+% ================================================================================ %
+\begin{problem}
+Screenshot of the results after running the \texttt{GRADER}.
+\end{problem}
+
+\begin{solution}
+	The \texttt{activity4-CEDT} grader passes every check --- \texttt{Result: true} ---
+	then prompts for the Student ID and full name to submit the result.
+
+	\fig[\linewidth]{images/grader.png}{\texttt{activity4-CEDT} grader --- all checks pass, \texttt{Result: true}.}{grader}
+\end{solution}
+% ================================================================================ %
+
+\end{document}

@@ -1,0 +1,36 @@
+# Activity 4 - Step 4.b
+# A single pod running two containers: the todo service and its redis database.
+# Because both containers live in the same pod they share one network namespace,
+# so the todo container reaches redis at localhost:6379 -> REDIS_HOST=localhost.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: todo
+  labels:
+    app: todo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: todo
+  template:
+    metadata:
+      labels:
+        app: todo
+    spec:
+      containers:
+        - name: todo
+          image: natawut/todo-service:release-2.1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          env:
+            - name: REDIS_HOST
+              value: "localhost"      # same pod -> same network namespace
+            - name: REDIS_PORT
+              value: "6379"
+        - name: redis
+          image: redis:7-alpine
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 6379
