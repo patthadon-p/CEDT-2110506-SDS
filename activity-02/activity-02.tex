@@ -1,0 +1,198 @@
+\documentclass[a4paper, 10pt]{article}
+\usepackage{scrextend}
+\changefontsizes{9pt}
+\input{../course-config}
+\usepackage{../vendor/template/CEDT-Assignment-style}
+
+\begin{document}
+\subject
+\asgntitle{2}{}{Week 3}{\StudentID\ \StudentName}{\DefaultCollaborators}
+
+% ================================================================================ %
+\section*{Activity: Docker Compose}
+% ================================================================================ %
+
+\par\noindent \textthai{ให้นิสิตติดตั้ง} application \textthai{ที่ประกอบด้วย}
+\begin{enumerate}
+	\item node\_exporter 3 replicas
+	\item prometheus
+	\item grafana
+\end{enumerate}
+
+\par\noindent \textthai{โดยที่}
+\begin{itemize}
+	\item project name \textthai{คือ} monitoring
+	\item \textthai{ใช้} custom network \textthai{ชื่อ} ``monitoring''
+	\item \textthai{กำหนด} resource limit \textthai{สำหรับ} node\_exporter \textthai{ให้ใช้} CPU \textthai{ได้ไม่เกิน} 25\%
+	\item \textthai{กำหนด} dependencies \textthai{ที่เหมาะสม}
+	\item Prometheus \textthai{ดึงข้อมูลจาก} node\_exporter \textthai{ทุก} replicas
+	      \begin{itemize}
+		      \item \textit{Hint:} \textthai{เขียน} prometheus.yml \textthai{ให้ตั้ง} targets \textthai{เป็น} arrays
+		            \begin{codingbox}[language=yaml]
+- targets: [monitoring-node-exporter-1:9100, monitoring-node-exporter-2:9100, monitoring-node-exporter-3:9100]
+\end{codingbox}
+		      \item \textthai{หรือ}
+		            \begin{codingbox}[language=yaml]
+- targets:
+  - monitoring-node-exporter-1:9100
+  - monitoring-node-exporter-2:9100
+  - monitoring-node-exporter-3:9100
+\end{codingbox}
+	      \end{itemize}
+	\item \textthai{ใช้} Docker Compose \textthai{บนคอมพิวเตอร์} 1 \textthai{เครื่อง} \textthai{ด้วยคำสั่ง}
+	      \begin{codingbox}[language=bash]
+$ docker compose up --scale node-exporter=3 -d
+$
+\end{codingbox}
+	\item \textthai{รันคำสั่งต่อไปนี้เพื่อให้} node-exporter \textthai{ใช้} CPU
+	      \begin{codingbox}[language=bash]
+$ docker exec -d monitoring-node-exporter-1 sh -c "while true; do echo > /dev/null; done"
+$ docker exec -d monitoring-node-exporter-2 sh -c "while true; do echo > /dev/null; done"
+$ docker exec -d monitoring-node-exporter-3 sh -c "while true; do echo > /dev/null; done"
+$
+\end{codingbox}
+	\item \textthai{ใช้} Grafana \textthai{สร้ำง} dashboard \textthai{เพื่อ} monitor metrics \texttt{node\_load1}
+	\item \textthai{รันโปรแกรม} grader \textthai{ขณะที่ทุก} service
+	      \textthai{ทำงานอยู่ (รายละเอียดของโปรแกรมจะแจ้งใน myCourseVille)}
+\end{itemize}
+
+\newpage
+
+\par\noindent \underline{\textbf{\textthai{สิ่งที่ต้องส่งได้แก่}}}
+
+\begin{enumerate}
+	\item \textthai{ไฟล์} \texttt{compose.yml}
+	\item \textthai{ไฟล์} \texttt{prometheus.yml}
+	\item screen capture \textthai{การรันคำสั่ง} \texttt{docker stats}
+	\item screen capture \textthai{หน้าจอของ} Grafana: \href{http://localhost:3000}{http://localhost:3000}
+	      \textthai{แสดง} metrics \texttt{node\_load1} \textthai{ตัวอย่างเช่น}
+	      \fig[0.8\linewidth]{images/example-node\_load1.png}{Screenshot of grafana dashboard showing \texttt{node\_load1} metric.}{node load1 metric}
+	      (\textthai{หมายเหตุ}: node\_load1 \textthai{วัด} load \textthai{ของเครื่อง} \textthai{ไม่ใช่เฉพาะ} container
+	      \textthai{เนื่องจาก} node-exporter \textthai{ทั้ง} 3 \textthai{ตัว} \textthai{รันอยู่บนเครื่องเดียวกันจึงรายงานผลใกล้เคียงกัน ถ้าอยู่คนละเครื่องก็จะต่างกัน})
+\end{enumerate}
+
+\begin{flushright}
+	The answers and solutions are provided in the next page\dots
+\end{flushright}
+
+\newpage
+
+% ================================================================================ %
+%                                    Problem 01                                    %
+% ================================================================================ %
+\begin{problem}
+\textthai{ไฟล์} \texttt{compose.yml}
+\end{problem}
+
+\begin{solution}
+	\begin{codingbox*}[language=yaml]
+name: monitoring
+
+networks:
+  monitoring:
+    driver: bridge
+
+volumes:
+  grafana-vol:
+
+services:
+  node-exporter:
+    image: prom/node-exporter:v1.12.0
+    expose:
+      - 9100
+    networks:
+      - monitoring
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: "0.25"
+
+  prometheus:
+    image: prom/prometheus:v3.0.1
+    container_name: prometheus
+    ports:
+      - 9090:9090
+    volumes:
+      - "./prometheus.yml:/etc/prometheus/prometheus.yml"
+    networks:
+      - monitoring
+    depends_on:
+      - node-exporter
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: grafana
+    ports:
+      - 3000:3000
+    volumes:
+      - grafana-vol:/var/lib/grafana
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+\end{codingbox*}
+\end{solution}
+% ================================================================================ %
+
+% ================================================================================ %
+%                                    Problem 02                                    %
+% ================================================================================ %
+\begin{problem}
+\textthai{ไฟล์} \texttt{prometheus.yml}
+\end{problem}
+
+\begin{solution}
+	\begin{codingbox*}[language=yaml]
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: node
+    static_configs:
+      - targets:
+        - 'monitoring-node-exporter-1:9100'
+        - 'monitoring-node-exporter-2:9100'
+        - 'monitoring-node-exporter-3:9100'
+\end{codingbox*}
+\end{solution}
+% ================================================================================ %
+
+% ================================================================================ %
+%                                    Problem 03                                    %
+% ================================================================================ %
+\begin{problem}
+screen capture \textthai{การรันคำสั่ง} \texttt{docker stats}
+\end{problem}
+
+\begin{solution}
+	\fig[\linewidth]{images/docker-stats.png}{Screenshot of the results after running the \texttt{docker stats} command.}{docker-stats}
+\end{solution}
+% ================================================================================ %
+
+% ================================================================================ %
+%                                    Problem 04                                    %
+% ================================================================================ %
+\begin{problem}
+screen capture \textthai{หน้าจอของ} Grafana: \href{http://localhost:3000}{http://localhost:3000}
+\textthai{แสดง} metrics \texttt{node\_load1}
+\end{problem}
+
+\begin{solution}
+	\fig[0.9\linewidth]{images/grafana-node-load1.png}{Screenshot of the Grafana dashboard showing the \texttt{node\_load1} metric.}{grafana-node-load1}
+\end{solution}
+% ================================================================================ %
+
+% ================================================================================ %
+%                                    Problem 05                                    %
+% ================================================================================ %
+\begin{problem}
+Screenshot of the results after running the \texttt{GRADER}.
+\end{problem}
+
+\begin{solution}
+	\fig[\linewidth]{images/grader.png}{Screenshot of the results after running the \texttt{GRADER}.}{grader}
+\end{solution}
+% ================================================================================ %
+
+\end{document}
