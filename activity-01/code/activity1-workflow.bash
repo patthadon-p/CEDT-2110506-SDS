@@ -18,21 +18,21 @@ echo ""
 echo "=== INFO: Starting Docker containers... ==="
 
 # Node Exporter
-docker run --rm -d -q -p 9100:9100 --name node-exporter --network monitoring prom/node-exporter
+docker run --rm -d -p 9100:9100 --name node-exporter --network monitoring prom/node-exporter
 
 # Prometheus
-docker run --rm -d -q -p 9090:9090 --name prometheus --network monitoring -v "$(pwd)/code/prometheus.yml:/etc/prometheus/prometheus.yml" prom/prometheus:v3.0.1
+docker run --rm -d -p 9090:9090 --name prometheus --network monitoring -v "$(pwd)/code/prometheus.yml:/etc/prometheus/prometheus.yml" prom/prometheus:v3.0.1
 
 # Grafana
-docker run --rm -d -q -p 3000:3000 --name grafana --network monitoring -v grafana-vol:/var/lib/grafana grafana/grafana:11.4.0
+docker run --rm -d -p 3000:3000 --name grafana --network monitoring -v grafana-vol:/var/lib/grafana grafana/grafana:11.4.0
 
 sleep 1
 
 # Apache
-docker run --rm -d -q -p 8080:80 --name apache --network monitoring -v "$(pwd)/code/status.conf:/etc/apache2/mods-enabled/status.conf" ubuntu/apache2:latest
+docker run --rm -d -p 8080:80 --name apache --network monitoring -v "$(pwd)/code/status.conf:/etc/apache2/mods-enabled/status.conf" ubuntu/apache2:latest
 
 # Apache Exporter
-docker run --rm -d -q -p 9117:9117 --name apache-exporter --network monitoring lusotycoon/apache-exporter --scrape_uri="https://apache/service-status?auto"
+docker run --rm -d -p 9117:9117 --name apache-exporter --network monitoring lusotycoon/apache-exporter --scrape_uri="https://apache/service-status?auto"
 
 sleep 1
 
