@@ -1,4 +1,5 @@
 .venv
+sds
 
 **/.build/*.aux
 **/.build/*.fdb_latexmk
