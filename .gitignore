@@ -37,3 +37,5 @@ sds
 **/.terraform/
 **/*.tfstate
 **/*.tfstate.*
+
+activity-10/**/*.env
